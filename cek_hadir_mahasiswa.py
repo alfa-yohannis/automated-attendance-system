@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -17,18 +18,17 @@ from selenium.common.exceptions import (
 )
 from webdriver_manager.chrome import ChromeDriverManager
 
-# === CONSTANTS ===
+# === DEFAULT CONSTANTS ===
 LOGIN_URL = "https://siakad.pradita.ac.id/login"
 DAFTAR_HADIR_URL = "https://siakad.pradita.ac.id/mahasiswa/daftar_hadir"
 TIMEOUT = 30
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CSV_FILE = SCRIPT_DIR / "pemdas_senin.csv"
+DEFAULT_TARGET_MATKUL = "Pengantar Teknologi Informasi"
+DEFAULT_CSV_FILE = SCRIPT_DIR / "pemdas_senin.csv"
 LOG_FILE = SCRIPT_DIR / "log.txt"
 
-TARGET_MATKUL = "Pengantar Teknologi Informasi"
-
-# ----------------- Utils -----------------
+# ----------------- Utility Functions -----------------
 def mask_password(pwd: str) -> str:
     if not pwd:
         return ""
@@ -55,8 +55,8 @@ def read_all_users(filepath: Path):
 
 def build_driver():
     options = Options()
-    options.add_argument("--start-maximized")  # visible mode
-    # options.add_argument("--headless=new")   # uncomment if needed
+    options.add_argument("--start-maximized")
+    # options.add_argument("--headless=new")  # uncomment if needed
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def safe_click(driver, element):
@@ -65,7 +65,7 @@ def safe_click(driver, element):
     except (ElementClickInterceptedException, StaleElementReferenceException):
         driver.execute_script("arguments[0].click();", element)
 
-# ----------------- Core steps -----------------
+# ----------------- Selenium Steps -----------------
 def login(driver, wait, email: str, password: str):
     driver.get(LOGIN_URL)
     email_field = wait.until(EC.presence_of_element_located((By.ID, "exampleInputEmail1")))
@@ -96,7 +96,6 @@ def wait_for_table_to_load(driver, timeout=60):
     raise TimeoutException("Table rows not loaded within timeout.")
 
 def list_all_icon_attributes(driver, row):
-    """Log all <i> tags and their attributes in the given row."""
     icons = row.find_elements(By.TAG_NAME, "i")
     if not icons:
         log("⚠️ No <i> icons found in this row.")
@@ -119,7 +118,6 @@ def list_all_icon_attributes(driver, row):
         log(f"   {idx}. <i {formatted_attrs}>")
 
 def process_row_for_matkul(driver, wait, matkul_text: str):
-    """Click submit if exists, otherwise list all <i> icons in the row."""
     matkul_lit = xpath_literal(matkul_text)
     row_xpath = (
         f"//table//tr[td[@data-label and "
@@ -129,7 +127,6 @@ def process_row_for_matkul(driver, wait, matkul_text: str):
     row = wait.until(EC.presence_of_element_located((By.XPATH, row_xpath)))
     log(f"🔎 Found row for matkul: {matkul_text}")
 
-    # Try to find Submit Kehadiran button
     btn = None
     for xp in [
         ".//button[@title='Submit Kehadiran']",
@@ -150,32 +147,37 @@ def process_row_for_matkul(driver, wait, matkul_text: str):
         list_all_icon_attributes(driver, row)
 
 def logout(driver, wait):
-    """Click the logout link if it exists."""
     try:
         logout_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a[href*='/logout']")))
         driver.execute_script("arguments[0].scrollIntoView({block:'center'});", logout_link)
         safe_click(driver, logout_link)
-        # wait until back on login page (email field visible)
         WebDriverWait(driver, TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "exampleInputEmail1"))
         )
         log("🚪 Logged out successfully.")
     except TimeoutException:
-        log("⚠️ Logout flow timeout — possibly already logged out or different page state.")
+        log("⚠️ Logout timeout — possibly already logged out.")
     except Exception as e:
         log(f"⚠️ Logout error: {e}")
 
-# ----------------- Main (single browser, multi users) -----------------
+# ----------------- Main -----------------
 def main():
-    users = read_all_users(CSV_FILE)
+    # Parameter order: 1) target matkul, 2) CSV file
+    target_matkul = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TARGET_MATKUL
+    csv_file = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_CSV_FILE
+
+    log("=== Script started: MAHASISWA SUBMIT KEHADIRAN ===")
+    log(f"Target Mata Kuliah: {target_matkul}")
+    log(f"CSV file: {csv_file}")
+
+    users = read_all_users(csv_file)
     if not users:
-        log("❌ No data found in pemdas_senin.csv")
+        log("❌ No data found in the CSV file.")
         return
 
     driver = build_driver()
     wait = WebDriverWait(driver, TIMEOUT)
 
-    log(f"=== Script started for {len(users)} user(s) — single browser session ===")
     try:
         for idx, user in enumerate(users, start=1):
             email = (user.get("username") or "").strip()
@@ -183,35 +185,31 @@ def main():
             hari = (user.get("hari") or "").strip()
 
             if not email or not password:
-                log(f"⚠️ Skipping empty credentials at CSV row {idx}.")
+                log(f"⚠️ Skipping empty credentials at row {idx}.")
                 continue
 
             log("=" * 60)
-            log(f"▶️  User {idx}: {email} (Hari: {hari}) — processing...")
+            log(f"▶️  User {idx}: {email} (Hari: {hari})")
             try:
                 login(driver, wait, email, password)
                 go_to_daftar_hadir(driver, wait)
                 wait_for_table_to_load(driver, timeout=60)
-                process_row_for_matkul(driver, wait, TARGET_MATKUL)
+                process_row_for_matkul(driver, wait, target_matkul)
                 logout(driver, wait)
             except Exception as e:
                 log(f"❌ Error while processing {email}: {e}")
-                # try to navigate back to login for the next user
                 try:
                     driver.get(LOGIN_URL)
                 except Exception:
                     pass
+            time.sleep(2)
 
-            time.sleep(2)  # small gap before next user
-
-        log("🎯 All users processed. Leaving browser open.")
+        log("🎯 All users processed. Browser left open.")
         while True:
             time.sleep(60)
 
     except Exception as e:
         log(f"❌ Fatal error: {e}")
-        # keep browser open for inspection
-    # Do NOT quit the driver — as requested
 
 if __name__ == "__main__":
     main()
