@@ -27,7 +27,7 @@ def mask_password(pwd: str) -> str:
         return ""
     if len(pwd) <= 3:
         return "*" * len(pwd)
-    return pwd[0] + "*" * (len(pwd) - 2) + pwd[-1]
+    return pwd[0] + "*" * (len(pwd) - 2) + pwd[-1] 
 
 def log(msg: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -38,8 +38,9 @@ def log(msg: str):
 
 def build_driver():
     options = Options()
-    options.add_argument("--start-maximized")
-    # Always visible (no headless mode)
+    # options.add_argument("--start-maximized")  # Visible (unheadless) mode
+    options.add_argument("--headless=new")       # Run in headless mode
+    options.add_argument("--window-size=1920,1080")  # Optional: set resolution
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def login(driver, wait, email: str, password: str):
@@ -113,7 +114,7 @@ def main():
     email = sys.argv[2].strip()
     password = sys.argv[3]
 
-    log("=== Script started ===")
+    log("=== Script started: APPROVE KEHADIRAN ===")
     log(f"Target Mata Kuliah: {matkul}")
     log(f"Login user: {email} (password={mask_password(password)})")
 

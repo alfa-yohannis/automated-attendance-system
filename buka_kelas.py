@@ -41,8 +41,9 @@ def log(msg: str):
 
 def build_driver():
     options = Options()
-    options.add_argument("--start-maximized")
-    # Always visible (no headless mode)
+    # options.add_argument("--start-maximized")  # Visible (unheadless) mode
+    options.add_argument("--headless=new")       # Run in headless mode
+    options.add_argument("--window-size=1920,1080")  # Optional: set resolution
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     return driver
 
@@ -108,7 +109,7 @@ def main():
 
     matkul, email, password = sys.argv[1], sys.argv[2], sys.argv[3]
 
-    log("=== Script started ===")
+    log("=== Script started: BUKA KELAS ===")
     log(f"Target Mata Kuliah: {matkul}")
     log(f"Login user: {email} (password={mask_password(password)})")
 
