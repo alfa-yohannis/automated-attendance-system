@@ -55,8 +55,9 @@ def read_all_users(filepath: Path):
 
 def build_driver():
     options = Options()
-    options.add_argument("--start-maximized")
-    # options.add_argument("--headless=new")  # uncomment if needed
+    # options.add_argument("--start-maximized")
+    options.add_argument("--headless=new")       # Run in headless mode
+    options.add_argument("--window-size=1920,1080")  # Optional: set resolution
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def safe_click(driver, element):
@@ -204,9 +205,9 @@ def main():
                     pass
             time.sleep(2)
 
-        log("🎯 All users processed. Browser left open.")
-        while True:
-            time.sleep(60)
+        log("🎯 All users processed. Done.")
+        # while True:
+        #     time.sleep(60)
 
     except Exception as e:
         log(f"❌ Fatal error: {e}")
